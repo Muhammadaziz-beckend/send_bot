@@ -27,3 +27,4 @@ migrations/
 static/static_root/*
 
 ngrok.txt
+*.session
