@@ -1,47 +1,11 @@
 from rest_framework import serializers
-from .models import User
-from django.contrib.auth.password_validation import validate_password
+from .models import VerificationCode
 from django.utils.translation import gettext_lazy as _
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password, password_changed
 
-# class RegisterSerializer(serializers.ModelSerializer):
-
-#     class Meta:
-#         model = User
-#         fields = (
-#             "phone",
-#             "store",
-#             "first_name",
-#             "last_name",
-#             "password",
-#         )
-
-#     def validate_password(self, value):
-#         try:
-#             validate_password(value)
-#         except serializers.ValidationError as e:
-#             raise serializers.ValidationError({"password": e.messages})
-#         return value
-
-
-class RegisterPhoneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ("phone",)
-
-# RegisterPhoneSerializer().validated_data["phone"]
-# .is_valid(raise_exception=True)
-
-    # def create(self, validated_data):
-    #     user = User.objects.create_user(
-    #         phone=validated_data["phone"],
-    #         store=validated_data["store"],
-    #         password=validated_data["password"],
-    #         first_name=validated_data.get("first_name", ""),
-    #         last_name=validated_data.get("last_name", ""),
-    #     )
-    #     return user
+from .models import User
 
 
 class AuthTokenSerializer(serializers.Serializer):
@@ -84,3 +48,50 @@ class AuthTokenSerializer(serializers.Serializer):
         user = validated_data["user"]
         token, created = Token.objects.get_or_create(user=user)
         return {"token": token.key}
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = User
+        fields = (
+            "telegram_id",
+            "api_hash",
+            "phone",
+            "password",
+        )
+        extra_kwargs = {
+            "telegram_id": {"required": True},
+            "api_hash": {"required": True},
+            "password": {"write_only": True, "required": True},
+        }
+
+    def validate_password(self, attr):
+        try:
+            validate_password(attr)
+        except serializers.ValidationError as e:
+            raise serializers.ValidationError({"password": e.messages})
+        return attr
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            phone=validated_data["phone"],
+            telegram_id=validated_data["telegram_id"],
+            api_hash=validated_data["api_hash"],
+            password=validated_data["password"],
+        )
+        user.save()
+        return user
+
+
+class VerificationCodeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = VerificationCode
+        fields = (
+            "id",
+            "code",
+            "owner",
+            "created_at",
+            "telegram_id",
+        )

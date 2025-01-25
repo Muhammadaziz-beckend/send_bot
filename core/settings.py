@@ -90,6 +90,9 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {
+            "timeout": 20,
+        },
     }
 }
 
@@ -179,4 +182,4 @@ BOT_TELEGRAM_TOKEN = os.getenv("BOT_TELEGRAM_TOKEN")
 
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
-PHONE=os.getenv("PHONE")
+PHONE = os.getenv("PHONE")

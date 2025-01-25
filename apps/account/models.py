@@ -1,10 +1,19 @@
-from phonenumber_field.modelfields import PhoneNumberField
+import random
+import string
 from django.db import models
-from django.contrib.auth.models import AbstractUser
-from django_resized import ResizedImageField
-from django.utils.translation import gettext_lazy as _
+from datetime import timedelta
 from .manager import UserNewManager
-
+from django.contrib import messages
+from django.utils.timezone import now
+from asgiref.sync import async_to_sync
+from telethon.sync import TelegramClient
+from django_resized import ResizedImageField
+from telethon.errors import ApiIdInvalidError, RPCError,PhoneCodeInvalidError, PhoneNumberFloodError
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.models import AbstractUser
+from phonenumber_field.modelfields import PhoneNumberField
+from django.db import transaction
+import re
 
 class User(AbstractUser):
 
@@ -13,11 +22,6 @@ class User(AbstractUser):
         verbose_name_plural = "пользователи"
         ordering = ("-date_joined",)
 
-    username = models.CharField(
-        "User",
-        unique=True,
-        max_length=150,
-    )
     phone = PhoneNumberField(
         "Телефон номер",
         unique=True,
@@ -34,6 +38,18 @@ class User(AbstractUser):
         null=True,
         blank=True,
     )
+    telegram_id = models.CharField(
+        unique=True,
+        verbose_name="Telegram ID",
+        null=True,
+        max_length=12,
+    )
+    api_hash = models.CharField(
+        "API hash",
+        unique=True,
+        max_length=160,
+        null=True,
+    )
     first_name = models.CharField(
         _("first name"),
         max_length=150,
@@ -42,12 +58,19 @@ class User(AbstractUser):
         _("last name"),
         max_length=150,
     )
-    email = models.EmailField(_("email address"), blank=True, null=True)
+    email = None
+    username = None
 
-    USERNAME_FIELD = "username"
+    USERNAME_FIELD = "phone"
     REQUIRED_FIELDS = []
 
     objects = UserNewManager()
+
+    @staticmethod
+    def get_name_session(self):
+        if self.phone and self.telegram_id:
+            return f"{str(self.phone)+str(self.telegram_id)}"
+        return
 
     @property
     def get_full_name(self):
@@ -56,4 +79,35 @@ class User(AbstractUser):
     get_full_name.fget.short_description = _("полное имя")
 
     def __str__(self):
-        return f"{str(self.username) or self.get_full_name}"
+        return f"{str(self.phone) or self.get_full_name}"
+
+class VerificationCode(models.Model):
+    owner = models.ForeignKey(
+        "account.User",
+        models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="verification_codes",
+        verbose_name="Владелец",
+    )
+    code = models.CharField(
+        max_length=6,
+        verbose_name="Код подтверждения",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Время создания",
+    )
+
+    def is_valid(self):
+        """Проверка, не истёк ли код (например, через 5 минут)"""
+        return now() < self.created_at + timedelta(minutes=5)
+
+    @staticmethod
+    def generate_code(length=6):
+        """Генерация случайного кода"""
+        return "".join(random.choices(string.digits, k=length))
+
+    class Meta:
+        verbose_name = "Код для подтверждения"
+        verbose_name_plural = "Коды для подтверждения"
